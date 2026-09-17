@@ -63,45 +63,14 @@ Program sayisal ve kategorik sutunlari otomatik algilar.
 #   Veriyi train/test olarak ayirmak, on isleme yapmak, model egitmek ve
 #   Accuracy, Precision, Recall, F1 gibi metrikleri hesaplamak icin kullanilir.
 # -----------------------------------------------------------------------------
-import os
-from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+from tkinter.ttk import Style
+from typing import Optional, List, Dict, Any
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
-from colorama import Fore, Style, init as colorama_init
-
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import cm
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-)
-
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
+from colorama import Fore
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.model_selection import train_test_split
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    confusion_matrix,
-    classification_report,
-    ConfusionMatrixDisplay,
-)
 
 
 # -----------------------------------------------------------------------------
@@ -161,3 +130,95 @@ class AppState:
         self.active_data_source: Optional[str] = None
         self.cleaned_csv_path: Optional[Path] = None
         self.last_pdf_report_path: Optional[Path] = None
+
+
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# console ekranının daha okunabilir hale gelmesini sağlamak
+# SOLID: Single Responsibility
+def print_header(title:str) -> None: # lambda | 'başlangıçta bir şey yoksa None olarak al' diyoruz.
+    print("\n" + "=" * 78)
+    print(title)
+    print("=" * 78)
+
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# Menü kullanıcının sonucu okuyabilmesi için ENTER
+def pause() -> None:
+    input("\nDevam etmek için lütfen ENTER tuşuna basınız...")
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# Menu yazısını farklı renklerde kullanmamızı sağlar.
+def print_menu_option(text:str) -> None:
+    print(Fore.LIGHTCYAN_EX + text + Style.RESET_ALL)
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# print_step_title fonksiyonu STEP başlıklarını menü seçeneklerinden ayırmak için parlak camgöbeği renkte gösterir.
+def print_step_title(text:str) -> None:
+    print(Fore.CYAN + Style.BRIGHT + text + Style.RESET_ALL)
+
+
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# CSV sütun adlarını daha düzenli hale getirmek
+# Örnek:
+# " KeliME Sayısi " → "kelime_sayisi"
+# Bu sayede sütun isimlerindeki boşluk, büyük/küçük harf farklarından kaynaklanan hataları azaltmak
+def normalize_column_name(name:str) -> str:
+    value = str(name).replace("\ufeff", "").strip().lower()
+
+    replacemenets = {
+        "ç": "c",
+        "ğ": "g",
+        "ı": "i",
+        "ö": "o",
+        "ş": "s",
+        "ü": "u",
+        " ": "_",
+        "-": "_",
+        "/": "_",
+        "\\": "_",
+    }
+
+    for old, new in replacemenets.items():
+        value = value.replace(old, new)
+
+    while "__" in value:
+        value = value.replace("__", "_")
+
+    return value.strip("_")
+
+
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# discover_csv_files fonksiyonu kullanıcının dosya seçebilmesi için CSV dosyalarını tarar ve sadece görünen CSV dosyalarını eklemeye yani dinamik olarak CSV dosyalarını seçmeye yarar.
+
+def discover_csv_files() -> List[Path]:
+    found: List[Path] = []
+
+    search_dirs = [
+        Path.cwd(),
+        Path.cwd() / "data"
+    ]
+
+    for folder in search_dirs:
+        if not folder.exists() or not folder.is_dir():
+            continue
+
+        for file_path in folder.glob("*.csv"):
+            resolved = file_path.resolve()
+            if resolved not in found:
+                found.append(resolved)
+    return sorted(found, key=lambda p:p.name.lower())
