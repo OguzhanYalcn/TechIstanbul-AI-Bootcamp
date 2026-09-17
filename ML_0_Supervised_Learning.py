@@ -46,6 +46,7 @@ def main():
     #  X(Features/Özellikler) --> MODEL --> y (Label/Etiketler)
     #  1= Günlük çalışma saati
     #  30= Derse katılım yüzdesi
+    # CTRL + D → Satırı kopyalayıp alta yapıştırır.
     x = np.array([
         [1, 30],
         [2, 40],
