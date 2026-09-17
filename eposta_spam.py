@@ -1,0 +1,163 @@
+# -*- coding: utf-8 -*-
+
+"""
+===============================================================================
+MINI MACHINE LEARNING PROJESI - E-POSTA SPAM TAHMINI
+===============================================================================
+
+Bu proje, kullanicinin disaridan bir CSV dosyasi secmesini ve bu veri uzerinde
+console/terminal araciligiyla temel Machine Learning adimlarini uygulamasini
+saglar.
+
+PROJENIN AMACI
+--------------
+Bir e-postanin SPAM olup olmadigini tahmin eden bir Classification uygulamasi
+olusturmaktir.
+
+ORNEK CSV SUTUNLARI
+-------------------
+kelime_sayisi
+link_sayisi
+buyuk_harf_orani
+supheli_kelime_sayisi
+gonderici_puani
+ek_var
+spam
+
+Ornek:
+kelime_sayisi,link_sayisi,buyuk_harf_orani,supheli_kelime_sayisi,gonderici_puani,ek_var,spam
+120,0,0.05,0,92,0,0
+45,6,0.72,5,18,1,1
+
+spam:
+    0 -> Normal e-posta
+    1 -> Spam e-posta
+
+ONEMLI
+------
+Bu proje icin hedef sutun otomatik olarak 'spam' kabul edilir.
+'spam' disindaki sutunlar feature olarak kullanilir.
+
+Program sayisal ve kategorik sutunlari otomatik algilar.
+"""
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# Asagidaki import bolumu, projenin ihtiyac duydugu kutuphaneleri programa
+# dahil eder.
+#
+# os / pathlib:
+#   Dosya ve klasor islemleri icin kullanilir.
+#
+# pandas:
+#   CSV dosyasini okumak, tablo halinde incelemek ve temizlemek icin kullanilir.
+#
+# numpy:
+#   Sayisal islemlerde ve veri tipleriyle calisirken kullanilir.
+#
+# matplotlib:
+#   Confusion Matrix grafigini PNG olarak kaydetmek icin kullanilir.
+#
+# scikit-learn:
+#   Veriyi train/test olarak ayirmak, on isleme yapmak, model egitmek ve
+#   Accuracy, Precision, Recall, F1 gibi metrikleri hesaplamak icin kullanilir.
+# -----------------------------------------------------------------------------
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Tuple
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from colorama import Fore, Style, init as colorama_init
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import cm
+from reportlab.platypus import (
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+)
+
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    classification_report,
+    ConfusionMatrixDisplay,
+)
+
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# AppState sinifi program boyunca kullanilan verileri tek bir yerde tutar.
+#
+# Neden gereklidir?
+# Console uygulamalarinda kullanici once CSV yukler, sonra temizleme yapar,
+# sonra model egitir. Her adimda ayni veriyi tekrar tekrar okumak yerine
+# programin mevcut durumunu burada sakliyoruz.
+#
+# raw_df:
+#   CSV dosyasindan ilk okunan, dokunulmamis orijinal veri.
+#
+# df:
+#   Temizleme ve analiz islemlerinde kullanilan aktif veri.
+#
+# target_column:
+#   Tahmin edilmek istenen hedef sutun.
+#
+# feature_columns:
+#   Modelin tahmin yaparken kullanacagi giris sutunlari.
+#
+# best_model:
+#   Egitilen modeller arasinda F1 skoruna gore en basarili model.
+# -----------------------------------------------------------------------------
+class AppState:
+    def __init__(self):
+        self.csv_path: Optional[Path] = None
+        self.raw_df: Optional[pd.DataFrame] = None
+        self.df: Optional[pd.DataFrame] = None
+
+        self.target_column: Optional[str] = None
+        self.feature_columns: List[str] = []
+
+        self.best_model: Optional[Pipeline] = None
+        self.best_model_name: Optional[str] = None
+
+        self.X_test: Optional[pd.DataFrame] = None
+        self.y_test: Optional[pd.Series] = None
+        self.y_pred: Optional[np.ndarray] = None
+
+        self.model_results: List[Dict[str, Any]] = []
+
+        # Program ilk açıldığında yalnızca veri hazırlama adımları (1-6)
+        # gösterilir. Veri temizleme başarıyla tamamlandığında ikinci aşama
+        # yani Machine Learning seçenekleri açılır.
+        self.preprocessing_completed: bool = False
+
+        # Aktif console ekranini takip eder.
+        # 1 = Veri Hazirlama, 2 = Machine Learning.
+        self.current_step: int = 1
+
+        # Aktif olarak hangi veriyle devam edildigini takip eder.
+        # Degerler: 'original', 'cleaned' veya None
+        self.active_data_source: Optional[str] = None
+        self.cleaned_csv_path: Optional[Path] = None
+        self.last_pdf_report_path: Optional[Path] = None
