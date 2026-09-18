@@ -64,12 +64,12 @@ Program sayisal ve kategorik sutunlari otomatik algilar.
 #   Accuracy, Precision, Recall, F1 gibi metrikleri hesaplamak icin kullanilir.
 # -----------------------------------------------------------------------------
 from pathlib import Path
-from tkinter.ttk import Style
+# from tkinter.ttk import Style
 from typing import Optional, List, Dict, Any
 
 import numpy as np
 import pandas as pd
-from colorama import Fore
+from colorama import Fore, Style
 from sklearn.pipeline import Pipeline
 
 
@@ -132,13 +132,12 @@ class AppState:
         self.last_pdf_report_path: Optional[Path] = None
 
 
-
 # -----------------------------------------------------------------------------
 # BU KOD NE ISE YARAR?
 # -----------------------------------------------------------------------------
 # console ekranının daha okunabilir hale gelmesini sağlamak
 # SOLID: Single Responsibility
-def print_header(title:str) -> None: # lambda | 'başlangıçta bir şey yoksa None olarak al' diyoruz.
+def print_header(title:str) -> None: # 'başlangıçta bir şey yoksa None olarak al' diyoruz.
     print("\n" + "=" * 78)
     print(title)
     print("=" * 78)
@@ -204,7 +203,6 @@ def normalize_column_name(name:str) -> str:
 # BU KOD NE ISE YARAR?
 # -----------------------------------------------------------------------------
 # discover_csv_files fonksiyonu kullanıcının dosya seçebilmesi için CSV dosyalarını tarar ve sadece görünen CSV dosyalarını eklemeye yani dinamik olarak CSV dosyalarını seçmeye yarar.
-
 def discover_csv_files() -> List[Path]:
     found: List[Path] = []
 
@@ -222,3 +220,247 @@ def discover_csv_files() -> List[Path]:
             if resolved not in found:
                 found.append(resolved)
     return sorted(found, key=lambda p:p.name.lower())
+
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# Manuel olarak (copy-paste) olarak girilen yolu seçmek
+# Seçeneklerden
+def choose_csv_path() -> Optional[Path]:
+    print_header("CSV DOSYASINI SEÇ")
+
+    # -----------------------------------------------------------------
+    # BU MENU NE ISE YARAR?
+    # -----------------------------------------------------------------
+    # Kullanıcı CSV dosyasını iki farklı yöntemle seçebilir:
+    #
+    # 0 - Ana Menüye Dön
+    #     CSV seçmeden STEP 1 ana menüsüne geri döner.
+    #
+    # 1 - Dosya Yolunu Manuel Gir
+    #     Kullanıcı CSV dosyasının tam yolunu klavyeden yazar.
+    #
+    #     Örnek:
+    #         E:\ML\veriler\spam.csv
+    #
+    # 2 - Dosya Yolunu Dosya Seçerek Gir
+    #     Windows/Linux dosya seçme penceresi açılır.
+    #     Kullanıcı CSV dosyasını tıklayarak seçer.
+    # -----------------------------------------------------------------
+    print_menu_option("0 - Ana Menüye Dön")
+    print_menu_option("1 - Dosya Yolunu Manuel Gir")
+    print_menu_option("2 - Dosya Yolunu Dosya Seçerek Gir")
+
+    choice = input("\nSeçiminiz: ").strip()
+
+    if choice == "0":
+        return None
+
+    if choice == "1":
+        raw_path = input(
+            "\nCSV dosyasının tam yolunu giriniz: "
+        ).strip().strip('"')
+
+        if not raw_path:
+            print("\nHATA: Dosya yolu boş bırakılamaz.")
+            return None
+
+        # expanduser: kısayolları gerçek klasör yoluna çevirmeye yarar.
+        # ~\Desktop\veri.csv C:\Users\Data\Desktop\veri.csv
+        path = Path(raw_path).expanduser()
+
+        if not path.exists():
+            print("\nHATA: Girilen dosya bulunamadı.")
+            return None
+
+        if not path.is_file():
+            print("\nHATA: Girilen yol dosya değil.")
+            return None
+
+        if path.suffix.lower() != ".csv":
+            print("\nHATA: Girilen dosya CSV uzantılı değil.")
+            return None
+
+        print(f"\nSeçilen CSV dosyası:\n{path.resolve()}")
+        return path.resolve()
+
+    # -----------------------------------------------------------------------------
+    # BU KOD NE ISE YARAR?
+    # -----------------------------------------------------------------------------
+    # tkinter: Python'ın standart kütüphanelerinden biridir.
+    # Kullanıcının fare imleci ile dosya seçerek programa aktarılmasıdır.
+    if choice == "2":
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+
+            # Dosya seçme penceresinin arkada kalmasını engellemeye çalışır.
+            try:
+                root.attributes("-topmost", True)
+            except Exception:
+                pass
+
+            selected_file = filedialog.askopenfilename(
+                title="CSV Dosyasını Seç",
+                filetypes = [
+                    ("CSV Dosyaları", "*.csv"),
+                    ("Tüm Dosyalar", "*.txt"),
+                ]
+            )
+
+            root.destroy()
+
+            if not selected_file:
+                print("\nDosya Seçimi İptal Edildi.")
+                return None
+
+            path = Path(selected_file)
+
+            if not path.exists():
+                print("\nHATA: Seçilen dosya bulunamadı.")
+                return None
+
+            if path.suffix.lower() != ".csv":
+                print("\nLütfen CSV uzantılı bir dosya seçiniz.")
+                return None
+
+            print(f"\nSeçilen CSV dosyası:\n{path.resolve()}")
+            return path.resolve()
+        except ImportError:
+            print(
+                "\nHATA: Bu Python sürümünde tkinter bulunamadı.\n"
+                "Alternatif olarak '1 - Dosya Yolunu Manuel Gir' seçeneğini de kullanabilirsiniz."
+            )
+            return None
+    print("\nHATA: 0 <= X <= 2 arasında tam sayı seçmelisiniz. Yani 0,1,2 kullanabilirsiniz.")
+    return None
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# CSV dosyasını pandas DataFrame formatında okur.
+# Seperator: Virgül, noktalı virgül vb. pandas tarafından otomatik olarak tahmin etmesine yardımcı olan metriklerdir.
+def read_csv_safely(path:Path) -> pd.DataFrame:
+    encodings = ["utf-8", "utf-8-sig", "latin-1"]
+
+    last_error = None
+
+    for encoding in encodings:
+        try:
+            return pd.read_csv(
+                path,
+                sep=None,
+                engine="python",
+                encoding=encoding
+            )
+        except Exception as exc:
+            last_error = exc
+
+    # Zorlayarak Hata Fırlatma
+    raise RuntimeError(
+        f"CSV dosyası okunamadı. Son Hata: {last_error}"
+    )
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# load_csv
+
+def load_csv(state: AppState) -> None:
+    path = choose_csv_path()
+
+    if path is None:
+        return
+
+    try:
+        df = read_csv_safely(path)
+
+        if df.empty:
+            print("\nHATA: CSV dosyası boş.")
+            return
+
+        df.columns = [normalize_column_name(col) for col in df.columns]
+
+        state.csv_path = path
+        state.raw_df = df.copy(deep=True)
+        state.df = df.copy(deep=True)
+
+        state.target_column = None
+        state.feature_columns = []
+
+        state.best_model = None
+        state.best_model_name = None
+
+        state.X_test = None
+        state.y_test = None
+        state.y_pred = None
+
+        state.model_results = []
+
+        state.current_step = 2
+        state.preprocessing_completed = False
+        state.cleaned_csv_path = None
+        state.active_data_source = "original"
+
+        print_header("CSV BAŞARIYLA YÜKLENDİ.")
+
+        file_size_kb = path.stat().st_size / 1024
+        missing_total = int(df.isna().sum().sum()) # toplamın toplamı
+        duplicated_total = int(df.duplicated().sum())
+
+        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+        categorical_columns = [
+            column for column in df.columns
+            if column not in numeric_columns
+        ]
+
+        target_column = "spam" if "spam" in df.columns else None
+        features_columns = [
+            column for column in df.columns
+            if column != target_column
+        ]
+
+        print(f"Dosya Adı:                    {path.name}")
+        print(f"Dosya Yolu:                   {path}")
+        print(f"Dosya Boyutu:                 {file_size_kb:.2f} KB")
+        print(f"Dosya Satır Sayısı:           {len(df)}")
+        print(f"Dosya Sütun Sayısı:           {len(numeric_columns)}")
+        print(f"Kategorik Sütun:              {len(categorical_columns)}")
+        print(f"Eksik Değer:                  {missing_total}")
+        print(f"Duplicate Satır:              {duplicated_total}")
+
+        if target_column:
+            print(f"Target / Label       : {target_column}")
+            print(f"Problem Türü         : classification")
+            print(f"Feature Sayısı       : {len(features_columns)}")
+
+        else:
+            print(f"Target / Label       : BULUNAMADI")
+            print(f"Problem Türü         : BELİRTİLMEDİ")
+            print(f"UYARI                : CSV içinde 'spam' sütunu bulunamadı.")
+
+        print("\nFeature Sütunları")
+        for column in features_columns:
+            print(f"- {column}")
+
+        if target_column:
+            print("\nTarget / Label")
+            print(f"- {target_column}")
+
+        print("\nCSV Kullanıma Hazır.")
+    except Exception as exc:
+        print(f"\nHATA: CSV Yüklenemedi. \n{exc}")
+
+# -----------------------------------------------------------------------------
+# BU KOD NE ISE YARAR?
+# -----------------------------------------------------------------------------
+# CSV dosyası yüklenmeden menü çalışmasını engelle
+def require_data(state: AppState) -> bool:
+    if state.df is None:
+        print("\nÖnce bir CSV dosyasını yüklemelisiniz.")
+        return False
+    return True
